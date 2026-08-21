@@ -1,5 +1,5 @@
-// Service Worker - Sin caché. Siempre carga desde la red.
-const CACHE = 'mercaconsumo-v99-nocache';
+// Service Worker - Sin interferencia con APIs externas
+const CACHE = 'mercaconsumo-v100-nocache';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -11,10 +11,12 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Siempre va a la red. Nunca devuelve caché.
 self.addEventListener('fetch', event => {
-  // No interceptar peticiones a Supabase
-  if (event.request.url.includes('supabase.co')) return;
-  // Para todo lo demás, ir a la red directamente
+  const url = new URL(event.request.url);
+  // Ignorar cualquier petición que no sea del mismo dominio local (Supabase, Google Gemini, CDNs, etc.)
+  if (url.origin !== location.origin) {
+    return;
+  }
+  // Para archivos estáticos locales, siempre ir a la red directamente
   event.respondWith(fetch(event.request));
 });

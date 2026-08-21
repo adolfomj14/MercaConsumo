@@ -1,4 +1,4 @@
-// Algoritmo difuso de similitud para normalización no destructiva
+// Algoritmo difuso de similitud para normalización no destructiva y sugerencias
 export function normalizeText(text) {
   if (!text) return '';
   return text
@@ -32,8 +32,8 @@ function levenshteinDistance(s1, s2) {
 export function stringSimilarity(str1, str2) {
   const norm1 = normalizeText(str1);
   const norm2 = normalizeText(str2);
-  if (norm1 === norm2) return 1.0;
   if (!norm1 || !norm2) return 0.0;
+  if (norm1 === norm2) return 1.0;
 
   // Si uno contiene al otro completamente
   if (norm1.includes(norm2) || norm2.includes(norm1)) {
@@ -60,12 +60,34 @@ export function findBestProductMatch(rawName, existingProducts) {
     }
   }
 
-  // Sugerir solo si la similitud supera el 60%
-  if (highestScore >= 0.60) {
+  if (highestScore >= 0.50) {
     return {
       product: bestMatch,
       similarity: highestScore,
-      isExact: highestScore > 0.95
+      isExact: highestScore > 0.90
+    };
+  }
+  return null;
+}
+
+export function findBestStoreMatch(rawMerchant, existingStores) {
+  if (!rawMerchant || !existingStores || existingStores.length === 0) return null;
+  let bestMatch = null;
+  let highestScore = 0;
+
+  for (const store of existingStores) {
+    const score = stringSimilarity(rawMerchant, store.name);
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = store;
+    }
+  }
+
+  if (highestScore >= 0.45) {
+    return {
+      store: bestMatch,
+      similarity: highestScore,
+      isExact: highestScore > 0.90
     };
   }
   return null;
