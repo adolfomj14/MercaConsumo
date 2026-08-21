@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mercaconsumo-v1';
+const CACHE_NAME = 'mercaconsumo-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -16,7 +16,6 @@ const ASSETS = [
   './js/services/purchases.js',
   './js/services/inventory.js',
   './js/services/ocr.js',
-  './js/services/demoData.js',
   './js/utils/formatters.js',
   './js/utils/unitConverter.js',
   './js/utils/matcher.js',
@@ -52,11 +51,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Solo cacheamos peticiones GET a recursos estáticos locales
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Peticiones a Supabase o CDN externas van por red primero
   if (url.origin !== location.origin || url.pathname.includes('supabase.co')) {
     event.respondWith(
       fetch(event.request).catch(() => caches.match(event.request))

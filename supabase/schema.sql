@@ -1,5 +1,5 @@
 -- ==============================================================================
--- MERCACONSUMO - ESQUEMA DE BASE DE DATOS PARA SUPABASE POSTGRESQL
+-- MERCACONSUMO - ESQUEMA DE BASE DE DATOS PARA SUPABASE POSTGRESQL (100% RE-EJECUTABLE)
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Trigger para crear perfil automáticamente al registrarse o crearse un usuario en Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -34,6 +35,12 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- Poblar perfiles para usuarios que ya hayan sido creados previamente
+INSERT INTO public.profiles (id, full_name, currency_code, timezone)
+SELECT id, COALESCE(raw_user_meta_data->>'full_name', split_part(email, '@', 1)), 'COP', 'America/Bogota'
+FROM auth.users
+ON CONFLICT (id) DO NOTHING;
 
 -- 2. CATEGORÍAS
 CREATE TABLE IF NOT EXISTS public.categories (
@@ -134,7 +141,7 @@ CREATE TABLE IF NOT EXISTS public.consumptions (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 10. CICLOS DE CONSUMO (Para Predicción)
+-- 10. CICLOS DE CONSUMO
 CREATE TABLE IF NOT EXISTS public.consumption_cycles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -169,19 +176,34 @@ ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.consumptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.consumption_cycles ENABLE ROW LEVEL SECURITY;
 
+-- Eliminación previa para garantizar re-ejecución limpia sin errores
+DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can read own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can view global and own categories" ON public.categories;
+DROP POLICY IF EXISTS "Users can insert own categories" ON public.categories;
+DROP POLICY IF EXISTS "Users can update own categories" ON public.categories;
+DROP POLICY IF EXISTS "Users can delete own categories" ON public.categories;
 CREATE POLICY "Users can view global and own categories" ON public.categories FOR SELECT USING (user_id IS NULL OR auth.uid() = user_id);
 CREATE POLICY "Users can insert own categories" ON public.categories FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update own categories" ON public.categories FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete own categories" ON public.categories FOR DELETE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can manage own stores" ON public.stores;
 CREATE POLICY "Users can manage own stores" ON public.stores FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own products" ON public.products;
 CREATE POLICY "Users can manage own products" ON public.products FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own receipts" ON public.receipts;
 CREATE POLICY "Users can manage own receipts" ON public.receipts FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own purchases" ON public.purchases;
 CREATE POLICY "Users can manage own purchases" ON public.purchases FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can manage own purchase items" ON public.purchase_items;
 CREATE POLICY "Users can manage own purchase items" ON public.purchase_items FOR ALL 
 USING (
     EXISTS (SELECT 1 FROM public.purchases WHERE purchases.id = purchase_items.purchase_id AND purchases.user_id = auth.uid())
@@ -190,8 +212,13 @@ WITH CHECK (
     EXISTS (SELECT 1 FROM public.purchases WHERE purchases.id = purchase_items.purchase_id AND purchases.user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can manage own inventory" ON public.inventory;
 CREATE POLICY "Users can manage own inventory" ON public.inventory FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own consumptions" ON public.consumptions;
 CREATE POLICY "Users can manage own consumptions" ON public.consumptions FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own consumption cycles" ON public.consumption_cycles;
 CREATE POLICY "Users can manage own consumption cycles" ON public.consumption_cycles FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- 13. CATEGORÍAS GLOBALES INICIALES

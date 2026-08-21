@@ -1,6 +1,7 @@
 // Orquestador Principal de MercaConsumo PWA
 import { state } from './state.js';
 import { getCurrentUser } from './services/auth.js';
+import { getSupabase } from './services/supabase.js';
 import { fetchCategories, fetchProducts } from './services/products.js';
 import { fetchStores } from './services/stores.js';
 import { fetchPurchases } from './services/purchases.js';
@@ -45,14 +46,7 @@ export function navigate(viewName, params = {}) {
     }
   });
 
-  if (!state.user && viewName !== 'auth') {
-    bottomNav.style.display = 'none';
-    fab.style.display = 'none';
-    renderAuthView(root, () => initApp());
-    return;
-  }
-
-  if (viewName === 'auth') {
+  if (!state.user || viewName === 'auth') {
     bottomNav.style.display = 'none';
     fab.style.display = 'none';
     renderAuthView(root, () => initApp());
@@ -91,15 +85,20 @@ export function navigate(viewName, params = {}) {
 }
 
 async function loadInitialData() {
-  await Promise.all([
-    fetchCategories(),
-    fetchStores(),
-    fetchProducts(),
-    fetchInventory(),
-    fetchPurchases(),
-    fetchConsumptions(),
-    fetchCycles()
-  ]);
+  try {
+    // Usar allSettled para que si una tabla está vacía o recién creada, no bloquee la carga
+    await Promise.allSettled([
+      fetchCategories(),
+      fetchStores(),
+      fetchProducts(),
+      fetchInventory(),
+      fetchPurchases(),
+      fetchConsumptions(),
+      fetchCycles()
+    ]);
+  } catch (err) {
+    console.warn('Advertencia al cargar datos de tablas:', err);
+  }
 }
 
 async function initApp() {
@@ -130,6 +129,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Header home & profile
   document.getElementById('btn-header-home')?.addEventListener('click', () => navigate('dashboard'));
   document.getElementById('btn-header-profile')?.addEventListener('click', () => navigate('settings'));
+
+  // Suscribirse a cambios de sesión en Supabase
+  const sb = getSupabase();
+  if (sb) {
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        state.setUser(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        state.setUser(null);
+        navigate('auth');
+      }
+    });
+  }
 
   initApp();
 });

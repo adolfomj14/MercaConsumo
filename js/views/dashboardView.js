@@ -10,7 +10,6 @@ export function renderDashboardView(container, navigateTo) {
   const consumptions = state.consumptions || [];
   const cycles = state.cycles || [];
 
-  // Calcular métricas para todos los productos
   const metricsList = products.map(p => {
     const inv = inventory.find(i => i.product_id === p.id);
     return calculateProductMetrics(p, purchases, consumptions, cycles, inv);
@@ -18,7 +17,6 @@ export function renderDashboardView(container, navigateTo) {
 
   const globalBudget = calculateGlobalBudget(metricsList);
 
-  // Total compras del mes actual
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
@@ -28,18 +26,15 @@ export function renderDashboardView(container, navigateTo) {
   });
   const totalMonthSpent = monthPurchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
 
-  // Productos por reponer (Stock bajo o agotado)
   const itemsToReplenish = metricsList
     .filter(m => m.daysRemaining !== null && m.daysRemaining <= 3 || m.currentStock <= 0)
     .sort((a, b) => (a.daysRemaining || 0) - (b.daysRemaining || 0));
 
-  // Próximas compras estimadas
   const upcomingPurchases = metricsList
     .filter(m => m.daysRemaining !== null && m.dailyRate > 0)
     .sort((a, b) => a.daysRemaining - b.daysRemaining)
     .slice(0, 4);
 
-  // Productos con mayor consumo mensual
   const topConsumingProducts = [...metricsList]
     .filter(m => m.monthlyRate > 0)
     .sort((a, b) => (b.monthlyBudget.expected) - (a.monthlyBudget.expected))
@@ -49,7 +44,7 @@ export function renderDashboardView(container, navigateTo) {
     <!-- Saludo -->
     <div style="margin-bottom: 20px;">
       <h1 style="font-size: 1.35rem; font-weight: 800;">Hola 👋</h1>
-      <p style="color: var(--text-muted); font-size: 0.9rem;">Aquí tienes el estado de tu despensa y presupuesto</p>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Estado actual de tu despensa y presupuesto</p>
     </div>
 
     <!-- Tarjeta Resumen del Mes -->
@@ -111,8 +106,7 @@ export function renderDashboardView(container, navigateTo) {
 
       ${upcomingPurchases.length === 0 ? `
         <div style="text-align: center; padding: 16px; color: var(--text-muted); font-size: 0.9rem;">
-          Aún no hay suficientes ciclos para proyectar compras.<br>
-          <button class="btn btn-secondary btn-sm" id="btn-dash-load-demo" style="margin-top: 8px;">Cargar Datos de Demostración</button>
+          Registra compras y consumos para proyectar las próximas fechas de compra.
         </div>
       ` : `
         <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -142,7 +136,7 @@ export function renderDashboardView(container, navigateTo) {
     <div class="mc-card">
       <h2 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 12px;">Productos con Mayor Consumo</h2>
       ${topConsumingProducts.length === 0 ? `
-        <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 10px;">Registra tus compras y consumos para ver el ranking.</p>
+        <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 10px;">Registra compras y consumos para ver el ranking.</p>
       ` : `
         <div style="display: flex; flex-direction: column; gap: 10px;">
           ${topConsumingProducts.map((p, idx) => `
@@ -166,18 +160,11 @@ export function renderDashboardView(container, navigateTo) {
     </div>
   `;
 
-  // Event Listeners
   document.getElementById('dash-action-buy')?.addEventListener('click', () => navigateTo('purchases', { openModal: true }));
   document.getElementById('dash-action-consume')?.addEventListener('click', () => navigateTo('inventory', { openConsumeModal: true }));
   document.getElementById('dash-action-scan')?.addEventListener('click', () => navigateTo('scan'));
   document.getElementById('dash-action-inventory')?.addEventListener('click', () => navigateTo('inventory'));
   document.getElementById('btn-see-all-predictions')?.addEventListener('click', () => navigateTo('stats'));
-  
-  document.getElementById('btn-dash-load-demo')?.addEventListener('click', async () => {
-    const { loadDemoData } = await import('../services/demoData.js');
-    await loadDemoData();
-    renderDashboardView(container, navigateTo);
-  });
 
   if (window.lucide) window.lucide.createIcons();
 }

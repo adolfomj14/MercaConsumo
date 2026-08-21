@@ -2,24 +2,39 @@
 import { getSupabase } from './supabase.js';
 import { state } from '../state.js';
 
-const LOCAL_STORAGE_DEMO_USER = 'mc_demo_user';
+export function mapAuthError(err) {
+  if (!err) return 'Error desconocido al autenticar.';
+  const msg = err.message || err.toString();
+  if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
+    return 'Correo o contraseña incorrectos. Verifica que el usuario esté creado en Supabase.';
+  }
+  if (msg.includes('Email not confirmed')) {
+    return 'Tu correo no está confirmado en Supabase. En Supabase -> Users márcalo como confirmado.';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many requests')) {
+    return 'Demasiadas solicitudes a Supabase. Espera un momento.';
+  }
+  return msg;
+}
 
 export async function getCurrentUser() {
   const sb = getSupabase();
-  if (sb) {
+  if (!sb) return null;
+
+  try {
     const { data: { session }, error } = await sb.auth.getSession();
+    if (error) {
+      console.warn('Error al recuperar sesión:', error);
+      state.setUser(null);
+      return null;
+    }
+
     if (session && session.user) {
       state.setUser(session.user);
       return session.user;
     }
-  }
-
-  // Modo Local / Demo
-  const demoUser = localStorage.getItem(LOCAL_STORAGE_DEMO_USER);
-  if (demoUser) {
-    const user = JSON.parse(demoUser);
-    state.setUser(user);
-    return user;
+  } catch (err) {
+    console.error('Excepción al obtener sesión:', err);
   }
 
   state.setUser(null);
@@ -28,48 +43,18 @@ export async function getCurrentUser() {
 
 export async function signIn(email, password) {
   const sb = getSupabase();
-  if (sb) {
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    state.setUser(data.user);
-    return data.user;
-  }
+  if (!sb) throw new Error('Cliente de Supabase no inicializado. Revisa js/config.js');
 
-  // Fallback Local
-  const mockUser = {
-    id: 'local-user-id-001',
-    email: email || 'usuario@mercaconsumo.app',
-    user_metadata: { full_name: email.split('@')[0] }
-  };
-  localStorage.setItem(LOCAL_STORAGE_DEMO_USER, JSON.stringify(mockUser));
-  state.setUser(mockUser);
-  return mockUser;
-}
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: email.trim(),
+    password: password
+  });
 
-export async function signUp(email, password, fullName) {
-  const sb = getSupabase();
-  if (sb) {
-    const { data, error } = await sb.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName }
-      }
-    });
-    if (error) throw error;
-    if (data.user) state.setUser(data.user);
-    return data.user;
-  }
+  if (error) throw error;
+  if (!data.user) throw new Error('No se pudo autenticar el usuario');
 
-  // Fallback Local
-  const mockUser = {
-    id: 'local-user-id-001',
-    email,
-    user_metadata: { full_name: fullName || email.split('@')[0] }
-  };
-  localStorage.setItem(LOCAL_STORAGE_DEMO_USER, JSON.stringify(mockUser));
-  state.setUser(mockUser);
-  return mockUser;
+  state.setUser(data.user);
+  return data.user;
 }
 
 export async function signOut() {
@@ -77,6 +62,5 @@ export async function signOut() {
   if (sb) {
     await sb.auth.signOut();
   }
-  localStorage.removeItem(LOCAL_STORAGE_DEMO_USER);
   state.setUser(null);
 }
