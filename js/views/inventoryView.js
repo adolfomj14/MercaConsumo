@@ -1,4 +1,4 @@
-// Vista de Inventario Doméstico con Equivalencia de Unidades Invariante
+// Vista de Inventario Doméstico: Cuadrícula de Categorías (Master-Detail)
 import { state } from '../state.js';
 import { formatQuantity, formatDate, formatRelativeDays } from '../utils/formatters.js';
 import { calculateProductMetrics } from '../utils/forecasting.js';
@@ -12,8 +12,11 @@ export function renderInventoryView(container, navigateTo, params = {}) {
   const purchases = state.purchases || [];
   const consumptions = state.consumptions || [];
   const cycles = state.cycles || [];
+  const allCategories = state.categories || [];
 
-  let activeTab = params.tab || 'stock';
+  let activeTab = params.tab || 'stock'; // 'stock' | 'history'
+  let currentCategory = params.selectedCategory || null; // null = ver cuadrícula de categorías; string = ver productos de esa categoría
+  let searchQuery = '';
 
   const metricsList = products.map(p => {
     const inv = inventory.find(i => i.product_id === p.id);
@@ -21,8 +24,56 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     return {
       ...calculateProductMetrics(p, purchases, consumptions, cycles, inv),
       brand: p.brand || inv?.brand || '',
-      unitWeight: unitWeight
+      unitWeight: unitWeight,
+      categoryName: p.categoryName || inv?.categoryName || 'General',
+      categoryIcon: p.categoryIcon || inv?.categoryIcon || '📦'
     };
+  });
+
+  // Mapear todas las categorías disponibles y contar productos reales
+  const categoryMap = {};
+  
+  // 1. Inicializar con las categorías del sistema
+  allCategories.forEach(cat => {
+    categoryMap[cat.name] = {
+      name: cat.name,
+      icon: cat.icon || '📦',
+      color: cat.color || '#10B981',
+      items: []
+    };
+  });
+
+  // 2. Si no hay categorías en state, inicializar las estándar
+  const standardCats = [
+    { name: 'Frutas y Verduras', icon: '🍌', color: '#10B981' },
+    { name: 'Lácteos y Huevos', icon: '🥛', color: '#3B82F6' },
+    { name: 'Carnes y Proteínas', icon: '🥩', color: '#EF4444' },
+    { name: 'Granos y Cereales', icon: '🍚', color: '#F59E0B' },
+    { name: 'Despensa y Condimentos', icon: '🧂', color: '#64748B' },
+    { name: 'Aseo del Hogar', icon: '🧹', color: '#8B5CF6' },
+    { name: 'Cuidado Personal', icon: '🧴', color: '#EC4899' },
+    { name: 'Bebidas y Snacks', icon: '🥤', color: '#6366F1' },
+    { name: 'General', icon: '📦', color: '#10B981' }
+  ];
+
+  standardCats.forEach(sc => {
+    if (!categoryMap[sc.name]) {
+      categoryMap[sc.name] = { ...sc, items: [] };
+    }
+  });
+
+  // 3. Distribuir productos calculados en sus categorías
+  metricsList.forEach(m => {
+    const cName = m.categoryName || 'General';
+    if (!categoryMap[cName]) {
+      categoryMap[cName] = {
+        name: cName,
+        icon: m.categoryIcon || '📦',
+        color: '#10B981',
+        items: []
+      };
+    }
+    categoryMap[cName].items.push(m);
   });
 
   function render() {
@@ -30,109 +81,205 @@ export function renderInventoryView(container, navigateTo, params = {}) {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
         <div>
           <h1 style="font-size: 1.35rem; font-weight: 800;">Inventario</h1>
-          <p style="color: var(--text-muted); font-size: 0.85rem;">Stock disponible y cálculo exacto de unidades</p>
+          <p style="color: var(--text-muted); font-size: 0.85rem;">Despensa organizada por categorías</p>
         </div>
         <button class="btn btn-primary btn-sm" id="btn-open-consume-modal">
           + Consumo
         </button>
       </div>
 
-      <!-- Pestañas de Vista -->
+      <!-- Pestañas Principales (Stock vs Historial) -->
       <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
         <button class="btn btn-sm ${activeTab === 'stock' ? 'btn-primary' : 'btn-secondary'}" id="tab-stock-btn" style="flex: 1; font-weight: 700;">
-          📦 Stock Actual (${metricsList.length})
+          📦 Categorías (${Object.keys(categoryMap).length})
         </button>
         <button class="btn btn-sm ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}" id="tab-history-btn" style="flex: 1; font-weight: 700;">
-          📋 Historial de Consumos (${consumptions.length})
+          📋 Historial (${consumptions.length})
         </button>
       </div>
 
       <div id="tab-content">
-        ${activeTab === 'stock' ? renderStockTab() : renderHistoryTab()}
+        ${activeTab === 'stock' ? (currentCategory ? renderCategoryDetail(currentCategory) : renderCategoryGrid()) : renderHistoryTab()}
       </div>
     `;
 
     attachMainEvents();
   }
 
-  function renderStockTab() {
-    if (metricsList.length === 0) {
-      return `
-        <div class="mc-card" style="text-align: center; padding: 32px 16px;">
-          <div style="font-size: 2.5rem; margin-bottom: 8px;">📦</div>
-          <h3 style="font-weight: 700;">No hay productos en inventario</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">Registra una compra para comenzar a gestionar tu despensa.</p>
-        </div>
-      `;
-    }
+  // ── NIVEL 1: RECUADROS GRANDES DE CATEGORÍAS (GRID) ──────────────────────
+  function renderCategoryGrid() {
+    const catKeys = Object.keys(categoryMap);
 
     return `
-      <div style="display: flex; flex-direction: column; gap: 12px;">
-        ${metricsList.map(m => {
-          const isDepleted = m.currentStock <= 0;
-          const isLow = !isDepleted && (m.daysRemaining !== null && m.daysRemaining <= 3);
-          const badgeClass = isDepleted ? 'badge-depleted' : (isLow ? 'badge-low' : 'badge-normal');
-          const badgeText = isDepleted ? '🔴 Agotado' : (isLow ? '🟡 Próximo a agotarse' : '🟢 Normal');
+      <!-- Resumen general -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 0 2px;">
+        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
+          Selecciona una categoría:
+        </span>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">
+          Total: <strong>${metricsList.length}</strong> productos
+        </span>
+      </div>
 
-          const targetStock = m.monthlyRate > 0 ? (m.monthlyRate / 2) : 5;
-          const percent = Math.min(100, Math.round((m.currentStock / targetStock) * 100));
-
-          // Cálculo exacto e invariante de unidades restantes
-          let approxUnitsText = '';
-          if (m.unitWeight && m.unitWeight > 0 && m.currentStock > 0 && m.baseUnit !== 'unidad') {
-            const exactUnits = m.currentStock / m.unitWeight;
-            const roundedUnits = Math.round(exactUnits * 10) / 10;
-            approxUnitsText = `(~${roundedUnits % 1 === 0 ? roundedUnits.toFixed(0) : roundedUnits.toFixed(1)} ${roundedUnits === 1 ? 'unidad' : 'unidades'})`;
-          }
+      <!-- Cuadrícula de Recuadros Grandes -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+        ${catKeys.map(k => {
+          const cat = categoryMap[k];
+          const count = cat.items.length;
+          const lowStockCount = cat.items.filter(it => it.currentStock <= 0 || (it.daysRemaining !== null && it.daysRemaining <= 3)).length;
 
           return `
-            <div class="mc-card" style="padding: 14px;">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                  <h3 style="font-size: 1.05rem; font-weight: 700;">${m.productName}</h3>
-                  <div style="font-size: 0.8rem; color: var(--text-muted);">
-                    Categoría: ${m.categoryName} • Consumo: ~${formatQuantity(m.dailyRate, m.baseUnit)}/día
+            <div class="mc-card category-big-card" data-category-name="${cat.name}"
+                 style="cursor: pointer; padding: 18px 14px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 130px; transition: transform 0.15s ease, box-shadow 0.15s ease; border: 1.5px solid var(--border);"
+                 onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+              
+              <div style="font-size: 2.8rem; margin-bottom: 6px; line-height: 1;">
+                ${cat.icon}
+              </div>
+
+              <h3 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin-bottom: 6px; line-height: 1.2;">
+                ${cat.name}
+              </h3>
+
+              <div style="margin-top: auto;">
+                <span class="badge ${count > 0 ? (lowStockCount > 0 ? 'badge-low' : 'badge-normal') : ''}"
+                      style="font-size: 0.75rem; padding: 3px 8px; ${count === 0 ? 'background: var(--bg-main); color: var(--text-muted);' : ''}">
+                  ${count} ${count === 1 ? 'producto' : 'productos'}
+                </span>
+                ${lowStockCount > 0 ? `
+                  <div style="font-size: 0.7rem; color: #b91c1c; font-weight: 700; margin-top: 3px;">
+                    ⚠️ ${lowStockCount} por reponer
                   </div>
-                </div>
-                <span class="badge ${badgeClass}">${badgeText}</span>
-              </div>
-
-              <!-- Barra de Stock -->
-              <div class="progress-track" style="margin-top: 10px;">
-                <div class="progress-fill ${isDepleted ? 'depleted' : (isLow ? 'low' : '')}" style="width: ${percent}%;"></div>
-              </div>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 0.85rem;">
-                <div>
-                  <strong>Stock:</strong> ${formatQuantity(m.currentStock, m.baseUnit)}
-                  ${approxUnitsText ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; margin-left: 4px;">${approxUnitsText}</span>` : ''}
-                </div>
-                <div style="color: var(--text-muted);">
-                  Duración aprox: <strong>${formatRelativeDays(m.daysRemaining)}</strong>
-                </div>
-              </div>
-
-              ${m.unitWeight ? `
-                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-                  ⚖️ Peso fijo por pieza: 1 unidad = ${m.unitWeight >= 1 ? m.unitWeight.toFixed(2) + ' ' + m.baseUnit : (m.unitWeight * 1000).toFixed(0) + ' g'}
-                </div>
-              ` : ''}
-
-              <!-- Botones de Acción -->
-              <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; margin-top: 12px;">
-                <button class="btn btn-primary btn-sm btn-quick-consume" data-product-id="${m.productId}" style="padding: 6px 4px; font-size: 0.8rem;">
-                  🍽️ Consumir
-                </button>
-                <button class="btn btn-secondary btn-sm btn-edit-stock" data-product-id="${m.productId}" style="padding: 6px 4px; font-size: 0.8rem;">
-                  ✏️ Ajustar
-                </button>
-                <button class="btn btn-danger btn-sm btn-quick-deplete" data-product-id="${m.productId}" data-product-name="${m.productName}" style="padding: 6px 4px; font-size: 0.8rem;">
-                  ⚠️ ¡Se acabó!
-                </button>
+                ` : ''}
               </div>
             </div>
           `;
         }).join('')}
+      </div>
+    `;
+  }
+
+  // ── NIVEL 2: DETALLE DE LOS ARTÍCULOS DE LA CATEGORÍA ───────────────────
+  function renderCategoryDetail(catName) {
+    const cat = categoryMap[catName] || { name: catName, icon: '📦', items: [] };
+    let items = cat.items || [];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      items = items.filter(it => it.productName.toLowerCase().includes(q));
+    }
+
+    return `
+      <!-- Encabezado con Botón Volver -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        <button class="btn btn-secondary btn-sm" id="btn-back-to-categories" style="font-weight: 700; font-size: 0.85rem; padding: 6px 12px;">
+          ← Volver a Categorías
+        </button>
+        <span class="badge badge-normal" style="font-size: 0.8rem; padding: 4px 10px;">
+          ${items.length} ${items.length === 1 ? 'artículo' : 'artículos'}
+        </span>
+      </div>
+
+      <!-- Título de la Categoría Seleccionada -->
+      <div class="mc-card" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%); color: white; border: none; padding: 16px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 2.5rem; background: rgba(255,255,255,0.2); width: 54px; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center;">
+            ${cat.icon}
+          </div>
+          <div>
+            <h2 style="font-size: 1.25rem; font-weight: 800; margin: 0; color: white;">${cat.name}</h2>
+            <div style="font-size: 0.8rem; opacity: 0.9; margin-top: 2px;">
+              ${items.length === 0 ? 'Sin artículos en stock' : `Viendo los artículos de esta sección`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buscador dentro de la categoría -->
+      ${cat.items.length > 3 ? `
+        <div style="margin-bottom: 12px;">
+          <input type="text" id="cat-search-input" class="form-input" value="${searchQuery}" placeholder="🔍 Buscar en ${cat.name}..." style="font-size: 0.85rem; padding: 8px 12px;">
+        </div>
+      ` : ''}
+
+      <!-- Lista de Productos -->
+      ${items.length === 0 ? `
+        <div class="mc-card" style="text-align: center; padding: 32px 16px;">
+          <div style="font-size: 2.5rem; margin-bottom: 8px;">📦</div>
+          <h3 style="font-weight: 700;">No hay artículos en ${cat.name}</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
+            Registra una compra o ajusta un producto existente para asignarlo aquí.
+          </p>
+        </div>
+      ` : `
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${items.map(m => renderProductCard(m)).join('')}
+        </div>
+      `}
+    `;
+  }
+
+  function renderProductCard(m) {
+    const isDepleted = m.currentStock <= 0;
+    const isLow = !isDepleted && (m.daysRemaining !== null && m.daysRemaining <= 3);
+    const badgeClass = isDepleted ? 'badge-depleted' : (isLow ? 'badge-low' : 'badge-normal');
+    const badgeText = isDepleted ? '🔴 Agotado' : (isLow ? '🟡 Próximo a agotarse' : '🟢 Normal');
+
+    const targetStock = m.monthlyRate > 0 ? (m.monthlyRate / 2) : 5;
+    const percent = Math.min(100, Math.round((m.currentStock / targetStock) * 100));
+
+    let approxUnitsText = '';
+    if (m.unitWeight && m.unitWeight > 0 && m.currentStock > 0 && m.baseUnit !== 'unidad') {
+      const exactUnits = m.currentStock / m.unitWeight;
+      const roundedUnits = Math.round(exactUnits * 10) / 10;
+      approxUnitsText = `(~${roundedUnits % 1 === 0 ? roundedUnits.toFixed(0) : roundedUnits.toFixed(1)} ${roundedUnits === 1 ? 'unidad' : 'unidades'})`;
+    }
+
+    return `
+      <div class="mc-card" style="padding: 14px; margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 700;">${m.productName}</h3>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+              Consumo aprox: ~${formatQuantity(m.dailyRate, m.baseUnit)}/día
+            </div>
+          </div>
+          <span class="badge ${badgeClass}">${badgeText}</span>
+        </div>
+
+        <!-- Barra de Stock -->
+        <div class="progress-track" style="margin-top: 10px;">
+          <div class="progress-fill ${isDepleted ? 'depleted' : (isLow ? 'low' : '')}" style="width: ${percent}%;"></div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 0.85rem;">
+          <div>
+            <strong>Stock:</strong> ${formatQuantity(m.currentStock, m.baseUnit)}
+            ${approxUnitsText ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 6px; font-weight: 600; font-size: 0.75rem; margin-left: 4px;">${approxUnitsText}</span>` : ''}
+          </div>
+          <div style="color: var(--text-muted);">
+            Duración: <strong>${formatRelativeDays(m.daysRemaining)}</strong>
+          </div>
+        </div>
+
+        ${m.unitWeight ? `
+          <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
+            ⚖️ Peso fijo por pieza: 1 unidad = ${m.unitWeight >= 1 ? m.unitWeight.toFixed(2) + ' ' + m.baseUnit : (m.unitWeight * 1000).toFixed(0) + ' g'}
+          </div>
+        ` : ''}
+
+        <!-- Botones de Acción -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; margin-top: 12px;">
+          <button class="btn btn-primary btn-sm btn-quick-consume" data-product-id="${m.productId}" style="padding: 6px 4px; font-size: 0.8rem;">
+            🍽️ Consumir
+          </button>
+          <button class="btn btn-secondary btn-sm btn-edit-stock" data-product-id="${m.productId}" style="padding: 6px 4px; font-size: 0.8rem;">
+            ✏️ Ajustar
+          </button>
+          <button class="btn btn-danger btn-sm btn-quick-deplete" data-product-id="${m.productId}" data-product-name="${m.productName}" style="padding: 6px 4px; font-size: 0.8rem;">
+            ⚠️ ¡Se acabó!
+          </button>
+        </div>
       </div>
     `;
   }
@@ -157,6 +304,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
                 <strong style="font-size: 0.95rem;">${c.categoryIcon || '🍽️'} ${c.productName}</strong>
                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
                   📅 ${formatDate(c.consumption_date)}
+                  <span class="badge" style="background:var(--border); color:var(--text-muted); font-size:0.68rem; margin-left:4px;">${c.categoryName || 'General'}</span>
                   ${c.is_depletion_event ? '<span class="badge badge-depleted" style="margin-left: 6px; font-size: 0.7rem;">¡Se acabó!</span>' : ''}
                 </div>
               </div>
@@ -186,6 +334,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
   function attachMainEvents() {
     document.getElementById('tab-stock-btn')?.addEventListener('click', () => {
       activeTab = 'stock';
+      currentCategory = null;
       render();
     });
 
@@ -198,38 +347,43 @@ export function renderInventoryView(container, navigateTo, params = {}) {
       openConsumptionModal();
     });
 
-    document.querySelectorAll('.btn-quick-consume').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const prodId = btn.getAttribute('data-product-id');
-        openConsumptionModal(prodId);
+    // Clic en recuadros grandes de categoría (Level 1 -> Level 2)
+    document.querySelectorAll('.category-big-card').forEach(card => {
+      card.addEventListener('click', () => {
+        currentCategory = card.getAttribute('data-category-name');
+        searchQuery = '';
+        render();
       });
     });
 
-    document.querySelectorAll('.btn-edit-stock').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const prodId = btn.getAttribute('data-product-id');
-        openAdjustStockModal(prodId);
-      });
+    // Botón volver a categorías (Level 2 -> Level 1)
+    document.getElementById('btn-back-to-categories')?.addEventListener('click', () => {
+      currentCategory = null;
+      searchQuery = '';
+      render();
     });
 
-    document.querySelectorAll('.btn-quick-deplete').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const prodId = btn.getAttribute('data-product-id');
-        const prodName = btn.getAttribute('data-product-name');
-        showConfirmDialog({
-          title: '¿Registrar agotamiento?',
-          message: `¿Confirmas que se terminó **${prodName}**? El sistema calculará automáticamente la duración de este ciclo para afinar tus predicciones.`,
-          confirmText: 'Sí, ¡Se acabó!',
-          isDanger: true,
-          onConfirm: async () => {
-            await registerDepletion(prodId);
-            showToast(`Ciclo registrado para ${prodName} 🎯`, 'success');
+    // Buscador en detalle de categoría
+    const catSearch = document.getElementById('cat-search-input');
+    if (catSearch) {
+      catSearch.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        const containerContent = document.getElementById('tab-content');
+        if (containerContent && currentCategory) {
+          containerContent.innerHTML = renderCategoryDetail(currentCategory);
+          attachStockCardEvents();
+          document.getElementById('btn-back-to-categories')?.addEventListener('click', () => {
+            currentCategory = null;
+            searchQuery = '';
             render();
-          }
-        });
+          });
+        }
       });
-    });
+    }
 
+    attachStockCardEvents();
+
+    // Botones en pestaña de Historial
     document.querySelectorAll('.btn-edit-consumption').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
@@ -265,6 +419,40 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     });
   }
 
+  function attachStockCardEvents() {
+    document.querySelectorAll('.btn-quick-consume').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prodId = btn.getAttribute('data-product-id');
+        openConsumptionModal(prodId);
+      });
+    });
+
+    document.querySelectorAll('.btn-edit-stock').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prodId = btn.getAttribute('data-product-id');
+        openAdjustStockModal(prodId);
+      });
+    });
+
+    document.querySelectorAll('.btn-quick-deplete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prodId = btn.getAttribute('data-product-id');
+        const prodName = btn.getAttribute('data-product-name');
+        showConfirmDialog({
+          title: '¿Registrar agotamiento?',
+          message: `¿Confirmas que se terminó **${prodName}**? El sistema calculará automáticamente la duración de este ciclo para afinar tus predicciones.`,
+          confirmText: 'Sí, ¡Se acabó!',
+          isDanger: true,
+          onConfirm: async () => {
+            await registerDepletion(prodId);
+            showToast(`Ciclo registrado para ${prodName} 🎯`, 'success');
+            render();
+          }
+        });
+      });
+    });
+  }
+
   // Modal para Ajustar Stock e Información de Unidades
   function openAdjustStockModal(productId) {
     const modalContainer = document.getElementById('modal-container');
@@ -278,7 +466,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     const minStock = product.min_stock_alert || 1;
     const currentUnitWeight = parseUnitWeight(product.brand);
 
-    // Si ya existe unitWeight, calcular cuántas unidades representa el stock actual
     let initialUnits = '';
     if (currentUnitWeight && currentUnitWeight > 0 && currentStock > 0) {
       initialUnits = (currentStock / currentUnitWeight).toFixed(0);
@@ -398,7 +585,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     });
   }
 
-  // Modal para Registrar Consumo (con Asistente Inteligente)
+  // Modal para Registrar Consumo
   function openConsumptionModal(preselectedProductId = null) {
     const modalContainer = document.getElementById('modal-container');
     const today = new Date().toISOString().split('T')[0];
@@ -421,7 +608,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
                 <option value="">Selecciona un producto...</option>
                 ${products.map(p => `
                   <option value="${p.id}" ${p.id === preselectedProductId ? 'selected' : ''}>
-                    ${p.name} (${p.base_unit})
+                    ${p.categoryIcon || '📦'} ${p.name} (${p.base_unit})
                   </option>
                 `).join('')}
               </select>
