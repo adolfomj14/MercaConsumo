@@ -1,4 +1,4 @@
-// Vista de Ajustes y Perfil
+// Vista de Ajustes y Perfil con Seguridad Compartida en Supabase
 import { state } from '../state.js';
 import { signOut } from '../services/auth.js';
 import { getGeminiApiKey, setGeminiApiKey } from '../config.js';
@@ -40,16 +40,16 @@ export function renderSettingsView(container, navigateTo) {
       </button>
     </div>
 
-    <!-- IA Gemini para Facturas -->
+    <!-- IA Gemini para Facturas (Segura y Compartida) -->
     <div class="mc-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <h2 style="font-size: 1.05rem; font-weight: 700;">🧠 Lector de Facturas con IA</h2>
         <span class="badge ${geminiKey ? 'badge-normal' : 'badge-low'}">
-          ${geminiKey ? 'Activo' : 'Sin configurar'}
+          ${geminiKey ? 'Activo para todos 🔒' : 'Sin configurar'}
         </span>
       </div>
       <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
-        Google Gemini Flash Vision lee automáticamente tus fotos de tickets y facturas.
+        Google Gemini Flash Vision lee automáticamente tus fotos de tickets. Guardada de forma segura en Supabase para todas las cuentas del hogar.
       </p>
 
       <div class="form-group" style="margin-bottom: 10px;">
@@ -58,7 +58,7 @@ export function renderSettingsView(container, navigateTo) {
       </div>
 
       <button class="btn btn-primary btn-sm" id="btn-save-settings-key" style="width: 100%;">
-        Guardar Clave de IA
+        Guardar Clave Segura en Supabase
       </button>
     </div>
 
@@ -81,10 +81,15 @@ export function renderSettingsView(container, navigateTo) {
     </div>
   `;
 
-  document.getElementById('btn-save-settings-key')?.addEventListener('click', () => {
+  document.getElementById('btn-save-settings-key')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-save-settings-key');
+    btn.disabled = true;
+    btn.textContent = 'Guardando en Supabase...';
     const val = document.getElementById('settings-gemini-key').value.trim();
-    setGeminiApiKey(val);
-    showToast('Clave de IA actualizada ✅', 'success');
+    await setGeminiApiKey(val);
+    showToast('Clave de IA guardada de forma segura en Supabase 🔒✅', 'success');
+    btn.disabled = false;
+    btn.textContent = 'Guardar Clave Segura en Supabase';
   });
 
   document.getElementById('btn-logout')?.addEventListener('click', async () => {

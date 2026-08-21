@@ -1,7 +1,8 @@
-// Orquestador principal de MercaConsumo con Gestión Persistente de Tema
+// Orquestador principal de MercaConsumo con Carga Segura de Ajustes Globales
 import { state }          from './state.js';
 import { getSupabase }    from './services/supabase.js';
 import { getCurrentUser } from './services/auth.js';
+import { loadGlobalSettings } from './config.js';
 import { fetchCategories, fetchProducts } from './services/products.js';
 import { fetchStores }    from './services/stores.js';
 import { fetchPurchases } from './services/purchases.js';
@@ -68,6 +69,7 @@ export function navigate(viewName, params = {}) {
 
 async function loadData() {
   await Promise.allSettled([
+    loadGlobalSettings(),
     fetchCategories(),
     fetchStores(),
     fetchProducts(),
@@ -84,7 +86,6 @@ async function afterLogin() {
 }
 
 async function boot() {
-  // Asegurar tema guardado
   const savedTheme = localStorage.getItem('mc_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   document.documentElement.setAttribute('data-theme', savedTheme);
   document.body.setAttribute('data-theme', savedTheme);
@@ -107,20 +108,16 @@ async function boot() {
 }
 
 function setup() {
-  // Navegación inferior
   document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
     item.addEventListener('click', () => navigate(item.getAttribute('data-view')));
   });
 
-  // FAB
   fab()?.addEventListener('click', () => navigate('purchases', { openModal: true }));
 
-  // Header
   document.getElementById('btn-header-home')?.addEventListener('click', () => navigate('dashboard'));
   document.getElementById('btn-header-profile')?.addEventListener('click', () => navigate('settings'));
   document.getElementById('btn-header-theme')?.addEventListener('click', toggleTheme);
 
-  // Auth state
   const sb = getSupabase();
   if (sb) {
     sb.auth.onAuthStateChange((event, session) => {

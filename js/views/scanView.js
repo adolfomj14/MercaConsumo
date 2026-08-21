@@ -527,7 +527,7 @@ export function renderScanView(container, navigateTo) {
         return;
       }
 
-      setGeminiApiKey(keyVal);
+      await setGeminiApiKey(keyVal);
       showToast('¡Clave de Gemini verificada y guardada con éxito! ✨', 'success');
       close();
       renderInitial();
