@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>MercaConsumo - Gestión Inteligente de Compras e Inventario</title>
+  
+  <!-- PWA Meta -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#10B981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" type="image/svg+xml" href="./icons/icon-192.svg">
+  <link rel="apple-touch-icon" href="./icons/icon-192.svg">
+
+  <!-- Estilos y Librerías CDN -->
+  <link rel="stylesheet" href="./css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- Header Superior -->
+  <header class="app-header">
+    <div class="logo-badge" id="btn-header-home" style="cursor: pointer;">
+      <span style="font-size: 1.4rem;">🥑</span>
+      <span>MercaConsumo</span>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <span id="connection-badge" class="badge" style="background:#e0f2fe; color:#0369a1; font-size:0.7rem;">● Online</span>
+      <button id="btn-header-profile" class="btn btn-secondary btn-sm" style="padding: 6px 10px;">
+        <i data-lucide="user" style="width: 16px; height: 16px;"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Contenedor Dinámico Principal -->
+  <main class="main-container" id="app-root">
+    <div style="text-align: center; padding: 40px 0;">
+      <div style="font-size: 2rem; margin-bottom: 12px;">⏳</div>
+      <p style="color: var(--text-muted);">Iniciando MercaConsumo...</p>
+    </div>
+  </main>
+
+  <!-- Botón Flotante de Acción Rápida (FAB) -->
+  <button class="fab-btn" id="app-fab" title="Registrar Compra">
+    <i data-lucide="plus" style="width: 28px; height: 28px;"></i>
+  </button>
+
+  <!-- Barra de Navegación Inferior -->
+  <nav class="bottom-nav" id="app-bottom-nav">
+    <a class="nav-item active" data-view="dashboard">
+      <i data-lucide="home"></i>
+      <span>Inicio</span>
+    </a>
+    <a class="nav-item" data-view="purchases">
+      <i data-lucide="shopping-cart"></i>
+      <span>Compras</span>
+    </a>
+    <a class="nav-item" data-view="inventory">
+      <i data-lucide="package"></i>
+      <span>Inventario</span>
+    </a>
+    <a class="nav-item" data-view="stats">
+      <i data-lucide="bar-chart-3"></i>
+      <span>Estadísticas</span>
+    </a>
+    <a class="nav-item" data-view="settings">
+      <i data-lucide="settings"></i>
+      <span>Más</span>
+    </a>
+  </nav>
+
+  <!-- Contenedor para Notificaciones Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Contenedor para Modales Dinámicos -->
+  <div id="modal-container"></div>
+
+  <!-- Scripts Modulares -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
