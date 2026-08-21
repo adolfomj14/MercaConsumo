@@ -1,4 +1,4 @@
-// Orquestador principal de MercaConsumo
+// Orquestador principal de MercaConsumo con Gestión Persistente de Tema
 import { state }          from './state.js';
 import { getSupabase }    from './services/supabase.js';
 import { getCurrentUser } from './services/auth.js';
@@ -15,7 +15,6 @@ import { renderStatsView }     from './views/statsView.js';
 import { renderScanView }      from './views/scanView.js';
 import { renderSettingsView }  from './views/settingsView.js';
 
-// ── Helpers de DOM ──
 const root      = () => document.getElementById('app-root');
 const bottomNav = () => document.getElementById('app-bottom-nav');
 const fab       = () => document.getElementById('app-fab');
@@ -31,7 +30,16 @@ function setActiveNav(viewName) {
   });
 }
 
-// ── Router ──
+// Función global para alternar y persistir el tema
+export function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const newTheme = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  document.body.setAttribute('data-theme', newTheme);
+  localStorage.setItem('mc_theme', newTheme);
+}
+
+// Router
 export function navigate(viewName, params = {}) {
   state.setView(viewName);
 
@@ -58,7 +66,6 @@ export function navigate(viewName, params = {}) {
   if (window.lucide) window.lucide.createIcons();
 }
 
-// ── Carga de datos desde Supabase ──
 async function loadData() {
   await Promise.allSettled([
     fetchCategories(),
@@ -71,15 +78,17 @@ async function loadData() {
   ]);
 }
 
-// ── Flujo post-login ──
 async function afterLogin() {
   await loadData();
   navigate('dashboard');
 }
 
-// ── Arranque inicial ──
 async function boot() {
-  // Muestra "Iniciando..." mientras verificamos sesión
+  // Asegurar tema guardado
+  const savedTheme = localStorage.getItem('mc_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  document.body.setAttribute('data-theme', savedTheme);
+
   root().innerHTML = `
     <div style="min-height:calc(100vh - 120px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;">
       <div style="font-size:2.5rem;">🥑</div>
@@ -97,25 +106,24 @@ async function boot() {
   }
 }
 
-// ── Setup de eventos ──
 function setup() {
   // Navegación inferior
   document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
     item.addEventListener('click', () => navigate(item.getAttribute('data-view')));
   });
 
-  // FAB → nueva compra
+  // FAB
   fab()?.addEventListener('click', () => navigate('purchases', { openModal: true }));
 
   // Header
   document.getElementById('btn-header-home')?.addEventListener('click', () => navigate('dashboard'));
   document.getElementById('btn-header-profile')?.addEventListener('click', () => navigate('settings'));
+  document.getElementById('btn-header-theme')?.addEventListener('click', toggleTheme);
 
-  // Escuchar cambios de sesión de Supabase (ej. expiración de token)
+  // Auth state
   const sb = getSupabase();
   if (sb) {
     sb.auth.onAuthStateChange((event, session) => {
-      console.log('[Auth event]', event);
       if (event === 'SIGNED_OUT') {
         state.setUser(null);
         navigate('auth');
@@ -126,7 +134,6 @@ function setup() {
   boot();
 }
 
-// Ejecutar setup cuando el DOM esté listo
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setup);
 } else {

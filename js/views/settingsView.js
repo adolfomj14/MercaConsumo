@@ -2,6 +2,7 @@
 import { state } from '../state.js';
 import { signOut } from '../services/auth.js';
 import { getGeminiApiKey, setGeminiApiKey } from '../config.js';
+import { toggleTheme } from '../app.js';
 import { showToast } from '../utils/toast.js';
 
 export function renderSettingsView(container, navigateTo) {
@@ -65,7 +66,7 @@ export function renderSettingsView(container, navigateTo) {
     <div class="mc-card" style="display: flex; justify-content: space-between; align-items: center;">
       <div>
         <div style="font-weight: 700; font-size: 0.95rem;">Modo Oscuro</div>
-        <div style="font-size: 0.8rem; color: var(--text-muted);">Optimizado para uso nocturno</div>
+        <div style="font-size: 0.8rem; color: var(--text-muted);">Guardado automáticamente</div>
       </div>
       <button class="btn btn-secondary btn-sm" id="btn-toggle-theme">
         🌓 Cambiar Tema
@@ -93,8 +94,6 @@ export function renderSettingsView(container, navigateTo) {
   });
 
   document.getElementById('btn-toggle-theme')?.addEventListener('click', () => {
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
-    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    localStorage.setItem('mc_theme', isDark ? 'light' : 'dark');
+    toggleTheme();
   });
 }
