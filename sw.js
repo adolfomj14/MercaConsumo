@@ -1,5 +1,5 @@
 // Service Worker - Sin interferencia con APIs externas
-const CACHE = 'mercaconsumo-v100-nocache';
+const CACHE = 'mercaconsumo-v102-nocache';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -13,10 +13,8 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  // Ignorar cualquier petición que no sea del mismo dominio local (Supabase, Google Gemini, CDNs, etc.)
   if (url.origin !== location.origin) {
     return;
   }
-  // Para archivos estáticos locales, siempre ir a la red directamente
   event.respondWith(fetch(event.request));
 });

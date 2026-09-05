@@ -1,9 +1,10 @@
-// Vista de Inventario Doméstico: Cuadrícula de Categorías (Master-Detail)
+// Vista de Inventario Doméstico: Cuadrícula de Categorías con Edición Completa
 import { state } from '../state.js';
 import { formatQuantity, formatDate, formatRelativeDays } from '../utils/formatters.js';
 import { calculateProductMetrics } from '../utils/forecasting.js';
 import { parseUnitWeight } from '../utils/unitConverter.js';
 import { registerConsumption, updateConsumption, deleteConsumption, updateInventoryStock, registerDepletion } from '../services/inventory.js';
+import { updateProduct, fetchProducts } from '../services/products.js';
 import { showToast, showConfirmDialog } from '../utils/toast.js';
 
 export function renderInventoryView(container, navigateTo, params = {}) {
@@ -14,8 +15,8 @@ export function renderInventoryView(container, navigateTo, params = {}) {
   const cycles = state.cycles || [];
   const allCategories = state.categories || [];
 
-  let activeTab = params.tab || 'stock'; // 'stock' | 'history'
-  let currentCategory = params.selectedCategory || null; // null = ver cuadrícula de categorías; string = ver productos de esa categoría
+  let activeTab = params.tab || 'stock';
+  let currentCategory = params.selectedCategory || null;
   let searchQuery = '';
 
   const metricsList = products.map(p => {
@@ -30,12 +31,10 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     };
   });
 
-  // Mapear todas las categorías disponibles y contar productos reales
   const categoryMap = {};
-  
-  // 1. Inicializar con las categorías del sistema
   allCategories.forEach(cat => {
     categoryMap[cat.name] = {
+      id: cat.id,
       name: cat.name,
       icon: cat.icon || '📦',
       color: cat.color || '#10B981',
@@ -43,7 +42,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     };
   });
 
-  // 2. Si no hay categorías en state, inicializar las estándar
   const standardCats = [
     { name: 'Frutas y Verduras', icon: '🍌', color: '#10B981' },
     { name: 'Lácteos y Huevos', icon: '🥛', color: '#3B82F6' },
@@ -62,7 +60,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     }
   });
 
-  // 3. Distribuir productos calculados en sus categorías
   metricsList.forEach(m => {
     const cName = m.categoryName || 'General';
     if (!categoryMap[cName]) {
@@ -88,7 +85,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
         </button>
       </div>
 
-      <!-- Pestañas Principales (Stock vs Historial) -->
       <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
         <button class="btn btn-sm ${activeTab === 'stock' ? 'btn-primary' : 'btn-secondary'}" id="tab-stock-btn" style="flex: 1; font-weight: 700;">
           📦 Categorías (${Object.keys(categoryMap).length})
@@ -106,12 +102,10 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     attachMainEvents();
   }
 
-  // ── NIVEL 1: RECUADROS GRANDES DE CATEGORÍAS (GRID) ──────────────────────
   function renderCategoryGrid() {
     const catKeys = Object.keys(categoryMap);
 
     return `
-      <!-- Resumen general -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 0 2px;">
         <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
           Selecciona una categoría:
@@ -121,7 +115,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
         </span>
       </div>
 
-      <!-- Cuadrícula de Recuadros Grandes -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
         ${catKeys.map(k => {
           const cat = categoryMap[k];
@@ -159,7 +152,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     `;
   }
 
-  // ── NIVEL 2: DETALLE DE LOS ARTÍCULOS DE LA CATEGORÍA ───────────────────
   function renderCategoryDetail(catName) {
     const cat = categoryMap[catName] || { name: catName, icon: '📦', items: [] };
     let items = cat.items || [];
@@ -170,7 +162,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     }
 
     return `
-      <!-- Encabezado con Botón Volver -->
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
         <button class="btn btn-secondary btn-sm" id="btn-back-to-categories" style="font-weight: 700; font-size: 0.85rem; padding: 6px 12px;">
           ← Volver a Categorías
@@ -180,7 +171,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
         </span>
       </div>
 
-      <!-- Título de la Categoría Seleccionada -->
       <div class="mc-card" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%); color: white; border: none; padding: 16px; margin-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="font-size: 2.5rem; background: rgba(255,255,255,0.2); width: 54px; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center;">
@@ -195,20 +185,18 @@ export function renderInventoryView(container, navigateTo, params = {}) {
         </div>
       </div>
 
-      <!-- Buscador dentro de la categoría -->
       ${cat.items.length > 3 ? `
         <div style="margin-bottom: 12px;">
           <input type="text" id="cat-search-input" class="form-input" value="${searchQuery}" placeholder="🔍 Buscar en ${cat.name}..." style="font-size: 0.85rem; padding: 8px 12px;">
         </div>
       ` : ''}
 
-      <!-- Lista de Productos -->
       ${items.length === 0 ? `
         <div class="mc-card" style="text-align: center; padding: 32px 16px;">
           <div style="font-size: 2.5rem; margin-bottom: 8px;">📦</div>
           <h3 style="font-weight: 700;">No hay artículos en ${cat.name}</h3>
           <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
-            Registra una compra o ajusta un producto existente para asignarlo aquí.
+            Registra una compra o usa "✏️ Ajustar" en cualquier producto para asignarlo a esta categoría.
           </p>
         </div>
       ` : `
@@ -241,13 +229,12 @@ export function renderInventoryView(container, navigateTo, params = {}) {
           <div>
             <h3 style="font-size: 1.05rem; font-weight: 700;">${m.productName}</h3>
             <div style="font-size: 0.8rem; color: var(--text-muted);">
-              Consumo aprox: ~${formatQuantity(m.dailyRate, m.baseUnit)}/día
+              Categoría: <strong>${m.categoryIcon || '📦'} ${m.categoryName}</strong> • Consumo: ~${formatQuantity(m.dailyRate, m.baseUnit)}/día
             </div>
           </div>
           <span class="badge ${badgeClass}">${badgeText}</span>
         </div>
 
-        <!-- Barra de Stock -->
         <div class="progress-track" style="margin-top: 10px;">
           <div class="progress-fill ${isDepleted ? 'depleted' : (isLow ? 'low' : '')}" style="width: ${percent}%;"></div>
         </div>
@@ -268,7 +255,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
           </div>
         ` : ''}
 
-        <!-- Botones de Acción -->
         <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; margin-top: 12px;">
           <button class="btn btn-primary btn-sm btn-quick-consume" data-product-id="${m.productId}" style="padding: 6px 4px; font-size: 0.8rem;">
             🍽️ Consumir
@@ -316,7 +302,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
               </div>
             </div>
 
-            <!-- Botones Editar / Eliminar -->
             <div style="display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);">
               <button class="btn btn-secondary btn-sm btn-edit-consumption" data-id="${c.id}" style="padding: 3px 8px; font-size: 0.75rem;">
                 ✏️ Editar
@@ -347,7 +332,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
       openConsumptionModal();
     });
 
-    // Clic en recuadros grandes de categoría (Level 1 -> Level 2)
     document.querySelectorAll('.category-big-card').forEach(card => {
       card.addEventListener('click', () => {
         currentCategory = card.getAttribute('data-category-name');
@@ -356,14 +340,12 @@ export function renderInventoryView(container, navigateTo, params = {}) {
       });
     });
 
-    // Botón volver a categorías (Level 2 -> Level 1)
     document.getElementById('btn-back-to-categories')?.addEventListener('click', () => {
       currentCategory = null;
       searchQuery = '';
       render();
     });
 
-    // Buscador en detalle de categoría
     const catSearch = document.getElementById('cat-search-input');
     if (catSearch) {
       catSearch.addEventListener('input', (e) => {
@@ -383,7 +365,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
 
     attachStockCardEvents();
 
-    // Botones en pestaña de Historial
     document.querySelectorAll('.btn-edit-consumption').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
@@ -453,7 +434,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     });
   }
 
-  // Modal para Ajustar Stock e Información de Unidades
+  // ── Modal para Ajustar Stock, Categoría y Nombre del Producto ──────────────
   function openAdjustStockModal(productId) {
     const modalContainer = document.getElementById('modal-container');
     const product = products.find(p => p.id === productId);
@@ -465,24 +446,39 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     const currentUnit = inv ? inv.unit : (product.base_unit || 'kg');
     const minStock = product.min_stock_alert || 1;
     const currentUnitWeight = parseUnitWeight(product.brand);
+    const currentCatId = product.category_id || '';
 
     let initialUnits = '';
     if (currentUnitWeight && currentUnitWeight > 0 && currentStock > 0) {
       initialUnits = (currentStock / currentUnitWeight).toFixed(0);
     }
 
+    const catOptions = allCategories.map(c =>
+      `<option value="${c.id}" ${c.id === currentCatId ? 'selected' : ''}>${c.icon || '📦'} ${c.name}</option>`
+    ).join('');
+
     modalContainer.innerHTML = `
       <div class="modal-backdrop show" id="adjust-stock-backdrop">
         <div class="modal-sheet">
           <div class="modal-header">
-            <h2 style="font-size: 1.15rem; font-weight: 700;">✏️ Ajustar Stock y Unidades</h2>
+            <h2 style="font-size: 1.15rem; font-weight: 700;">✏️ Editar Producto y Stock</h2>
             <button class="btn btn-secondary btn-sm" id="btn-close-adjust-modal" style="border:none; padding:4px 8px;">✕</button>
           </div>
 
           <form id="adjust-stock-form">
+            <!-- Nombre del Producto (Editable) -->
             <div class="form-group">
-              <label class="form-label">Producto</label>
-              <input type="text" class="form-input" value="${product.name}" disabled style="background: var(--bg-main); opacity: 0.9; font-weight: 600;">
+              <label class="form-label">Nombre del Producto</label>
+              <input type="text" class="form-input" id="adj-product-name" value="${product.name}" required style="font-weight: 600;">
+            </div>
+
+            <!-- Categoría del Producto (Editable) -->
+            <div class="form-group">
+              <label class="form-label">Categoría</label>
+              <select class="form-select" id="adj-product-category" style="font-weight: 600;">
+                <option value="">📦 General / Sin categoría</option>
+                ${catOptions}
+              </select>
             </div>
 
             <!-- Stock disponible -->
@@ -518,7 +514,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
               <input type="number" step="any" min="0" class="form-input" id="adj-min-stock" value="${minStock}">
             </div>
 
-            <button type="submit" class="btn btn-primary" id="btn-save-adj-stock" style="margin-top: 8px;">Guardar Ajuste</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-adj-stock" style="margin-top: 8px;">Guardar Cambios</button>
           </form>
         </div>
       </div>
@@ -542,7 +538,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
         currentCalculatedWeight = stockVal / unitsVal;
         const weightStr = currentCalculatedWeight >= 1 ? `${currentCalculatedWeight.toFixed(2)} ${unitVal}` : `${(currentCalculatedWeight * 1000).toFixed(0)} g`;
         calcEl.style.display = 'block';
-        calcEl.innerHTML = `⚖️ <strong>Peso fijo por unidad:</strong> 1 ${product.name} = ${weightStr}.<br><span style="font-weight: 400; font-size: 0.75rem; color: #15803d;">Este peso se mantendrá fijo cada vez que consumas piezas individuales.</span>`;
+        calcEl.innerHTML = `⚖️ <strong>Peso fijo por unidad:</strong> 1 pieza = ${weightStr}.<br><span style="font-weight: 400; font-size: 0.75rem; color: #15803d;">Este peso se mantendrá fijo cada vez que consumas piezas individuales.</span>`;
       } else {
         calcEl.style.display = 'none';
         currentCalculatedWeight = null;
@@ -560,12 +556,24 @@ export function renderInventoryView(container, navigateTo, params = {}) {
       btn.disabled = true;
       btn.innerText = 'Guardando...';
 
+      const newName = document.getElementById('adj-product-name').value.trim();
+      const newCatId = document.getElementById('adj-product-category').value || null;
       const newStock = document.getElementById('adj-stock-qty').value;
       const newUnit = document.getElementById('adj-stock-unit').value;
       const approxUnits = document.getElementById('adj-units-count').value;
       const minStockAlert = document.getElementById('adj-min-stock').value;
 
       try {
+        // Actualizar datos del producto (Nombre y Categoría)
+        await updateProduct({
+          id: productId,
+          name: newName,
+          categoryId: newCatId,
+          baseUnit: newUnit,
+          minStock: minStockAlert
+        });
+
+        // Actualizar datos de inventario
         await updateInventoryStock({
           productId,
           currentStock: newStock,
@@ -574,18 +582,20 @@ export function renderInventoryView(container, navigateTo, params = {}) {
           approxUnits,
           minStockAlert
         });
-        showToast('Stock y peso unitario fijo guardados ✅', 'success');
+
+        await fetchProducts();
+
+        showToast('¡Producto y categoría actualizados correctamente! ✅', 'success');
         close();
         render();
       } catch (err) {
         showToast('Error al actualizar: ' + err.message, 'error');
         btn.disabled = false;
-        btn.innerText = 'Guardar Ajuste';
+        btn.innerText = 'Guardar Cambios';
       }
     });
   }
 
-  // Modal para Registrar Consumo
   function openConsumptionModal(preselectedProductId = null) {
     const modalContainer = document.getElementById('modal-container');
     const today = new Date().toISOString().split('T')[0];
@@ -632,7 +642,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
               </div>
             </div>
 
-            <!-- Previsualización del descuento real -->
             <div id="consume-live-calc" style="display: none; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; margin-bottom: 10px;">
             </div>
 
@@ -663,7 +672,6 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     const updateProductHint = (pId) => {
       currentSelectedProd = products.find(p => p.id === pId);
       const hintEl = document.getElementById('consume-equivalence-hint');
-      const unitEl = document.getElementById('consume-unit');
 
       if (!currentSelectedProd) {
         if (hintEl) hintEl.style.display = 'none';
@@ -748,12 +756,10 @@ export function renderInventoryView(container, navigateTo, params = {}) {
     });
   }
 
-  // Modal para Editar Consumo Existente
   function openEditConsumptionModal(cons) {
     const modalContainer = document.getElementById('modal-container');
 
     let unitsMatch = cons.notes ? cons.notes.match(/^\((\d+(?:\.\d+)?)\s*unidades?\)(?:\s*-\s*(.*))?$/) : null;
-    let initialUnits = unitsMatch ? unitsMatch[1] : '';
     let initialNotes = unitsMatch ? (unitsMatch[2] || '') : (cons.notes || '');
 
     modalContainer.innerHTML = `

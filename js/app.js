@@ -1,4 +1,4 @@
-// Orquestador principal de MercaConsumo con Carga Segura de Ajustes Globales
+// Orquestador principal de MercaConsumo con Gestión de Sesiones y Recuperación
 import { state }          from './state.js';
 import { getSupabase }    from './services/supabase.js';
 import { getCurrentUser } from './services/auth.js';
@@ -8,13 +8,14 @@ import { fetchStores }    from './services/stores.js';
 import { fetchPurchases } from './services/purchases.js';
 import { fetchInventory, fetchConsumptions, fetchCycles } from './services/inventory.js';
 
-import { renderAuthView }      from './views/authView.js';
-import { renderDashboardView } from './views/dashboardView.js';
-import { renderInventoryView } from './views/inventoryView.js';
-import { renderPurchasesView } from './views/purchasesView.js';
-import { renderStatsView }     from './views/statsView.js';
-import { renderScanView }      from './views/scanView.js';
-import { renderSettingsView }  from './views/settingsView.js';
+import { renderAuthView }         from './views/authView.js';
+import { renderDashboardView }    from './views/dashboardView.js';
+import { renderInventoryView }    from './views/inventoryView.js';
+import { renderPurchasesView }    from './views/purchasesView.js';
+import { renderStatsView }        from './views/statsView.js';
+import { renderScanView }         from './views/scanView.js';
+import { renderSettingsView }     from './views/settingsView.js';
+import { renderShoppingListView } from './views/shoppingListView.js';
 
 const root      = () => document.getElementById('app-root');
 const bottomNav = () => document.getElementById('app-bottom-nav');
@@ -46,7 +47,7 @@ export function navigate(viewName, params = {}) {
 
   if (!state.user || viewName === 'auth') {
     showApp(false);
-    renderAuthView(root(), () => afterLogin());
+    renderAuthView(root(), () => afterLogin(), params.authMode || 'login');
     return;
   }
 
@@ -55,13 +56,14 @@ export function navigate(viewName, params = {}) {
   window.scrollTo(0, 0);
 
   switch (viewName) {
-    case 'dashboard':  renderDashboardView(root(), navigate);         break;
-    case 'purchases':  renderPurchasesView(root(), navigate, params); break;
-    case 'inventory':  renderInventoryView(root(), navigate, params); break;
-    case 'stats':      renderStatsView(root(), navigate);             break;
-    case 'scan':       renderScanView(root(), navigate);              break;
-    case 'settings':   renderSettingsView(root(), navigate);          break;
-    default:           renderDashboardView(root(), navigate);
+    case 'dashboard':      renderDashboardView(root(), navigate);         break;
+    case 'purchases':      renderPurchasesView(root(), navigate, params); break;
+    case 'inventory':      renderInventoryView(root(), navigate, params); break;
+    case 'stats':          renderStatsView(root(), navigate);             break;
+    case 'scan':           renderScanView(root(), navigate);              break;
+    case 'settings':       renderSettingsView(root(), navigate);          break;
+    case 'shopping-list':  renderShoppingListView(root(), navigate);      break;
+    default:               renderDashboardView(root(), navigate);
   }
 
   if (window.lucide) window.lucide.createIcons();
@@ -97,7 +99,16 @@ async function boot() {
     </div>`;
   showApp(false);
 
+  // Verificar si la URL viene de un enlace de recuperación de contraseña
+  const hash = window.location.hash || '';
+  const isRecovery = hash.includes('type=recovery') || hash.includes('access_token');
+
   const user = await getCurrentUser();
+
+  if (isRecovery) {
+    navigate('auth', { authMode: 'reset' });
+    return;
+  }
 
   if (user) {
     await loadData();
@@ -124,6 +135,8 @@ function setup() {
       if (event === 'SIGNED_OUT') {
         state.setUser(null);
         navigate('auth');
+      } else if (event === 'PASSWORD_RECOVERY') {
+        navigate('auth', { authMode: 'reset' });
       }
     });
   }

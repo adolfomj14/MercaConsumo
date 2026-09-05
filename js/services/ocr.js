@@ -1,4 +1,4 @@
-// Lector Inteligente de Facturas con IA Gemini (Auto-Descubrimiento Dinámico de Modelos)
+// Lector Inteligente de Facturas con IA Gemini (Auto-Descubrimiento Dinámico de Modelos y Categorías)
 import { getGeminiApiKey } from '../config.js';
 
 function optimizeImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.8) {
@@ -38,7 +38,6 @@ function optimizeImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.8) {
   });
 }
 
-// Descubre dinámicamente qué modelos soporta la clave del usuario
 async function getAvailableGeminiModels(apiKey) {
   try {
     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -46,10 +45,9 @@ async function getAvailableGeminiModels(apiKey) {
       const data = await resp.json();
       const valid = (data.models || [])
         .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-        .map(m => m.name); // e.g. "models/gemini-2.0-flash", "models/gemini-1.5-flash"
+        .map(m => m.name);
       
       if (valid.length > 0) {
-        // Priorizar modelos flash
         valid.sort((a, b) => {
           if (a.includes('flash') && !b.includes('flash')) return -1;
           if (!a.includes('flash') && b.includes('flash')) return 1;
@@ -63,7 +61,6 @@ async function getAvailableGeminiModels(apiKey) {
     console.warn('Error descubriendo modelos:', e);
   }
 
-  // Lista de fallback si la llamada listModels falla
   return [
     'models/gemini-2.0-flash',
     'models/gemini-1.5-flash',
@@ -106,6 +103,7 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adici
   "items": [
     {
       "name": "Nombre limpio del producto (expande abreviaturas, ej: 'Plátano Maduro' en vez de 'PLTN MAD')",
+      "category": "Una de estas: Frutas y Verduras / Lácteos y Huevos / Carnes y Proteínas / Granos y Cereales / Despensa y Condimentos / Aseo del Hogar / Cuidado Personal / Bebidas y Snacks / General",
       "quantity": 1.0,
       "unit": "kg / g / unidad / L / ml / paquete / bolsa / caja / lb",
       "unitPrice": 0.0,
@@ -115,8 +113,9 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adici
 }
 Reglas:
 1. Extrae únicamente productos reales comprados.
-2. Los precios deben ser números sin símbolos de moneda ni separadores de miles.
-3. Si un producto se vendió por peso (kg o g), asigna esa unidad. Si fue por piezas/unidades, usa 'unidad'.`;
+2. Identifica la categoría más precisa de cada producto (ej: leche -> Lácteos y Huevos, arroz -> Granos y Cereales, jabón -> Aseo del Hogar).
+3. Los precios deben ser números sin símbolos de moneda ni separadores de miles.
+4. Si un producto se vendió por peso (kg o g), asigna esa unidad. Si fue por piezas/unidades, usa 'unidad'.`;
 
   const payload = {
     contents: [
@@ -138,12 +137,10 @@ Reglas:
     }
   };
 
-  // 1. Obtener los modelos activos en la cuenta del usuario
   const availableModels = await getAvailableGeminiModels(apiKey);
   let lastError = null;
 
   for (const modelName of availableModels) {
-    // modelName ya viene con el prefijo "models/...", ej: "models/gemini-2.0-flash"
     const cleanModel = modelName.replace(/^models\//, '');
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
 
@@ -168,7 +165,7 @@ Reglas:
         throw new Error('La IA no devolvió respuesta.');
       }
 
-      rawText = rawText.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
+      rawText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const parsed = JSON.parse(rawText);
 
       return {
@@ -177,19 +174,20 @@ Reglas:
         paymentMethod: parsed.paymentMethod || 'Efectivo',
         total: Number(parsed.total) || 0,
         items: (parsed.items || []).map(it => ({
-          rawName: it.name || 'Producto',
           name: it.name || 'Producto',
+          rawName: it.name || 'Producto',
+          category: it.category || 'General',
           quantity: Number(it.quantity) || 1,
-          unit: it.unit || 'unidad',
-          unitPrice: Number(it.unitPrice) || (Number(it.totalPrice) / (Number(it.quantity) || 1)),
+          unit: it.unit || 'kg',
+          unitPrice: Number(it.unitPrice) || 0,
           totalPrice: Number(it.totalPrice) || 0
         }))
       };
     } catch (err) {
+      console.warn(`[IA OCR] Falló con ${cleanModel}:`, err.message);
       lastError = err;
-      console.warn(`Fallo con ${cleanModel}:`, err.message);
     }
   }
 
-  throw lastError || new Error('No se pudo procesar la factura con los modelos de Gemini disponibles.');
+  throw new Error(`No se pudo leer la factura: ${lastError?.message || 'Error de conexión con la IA'}`);
 }

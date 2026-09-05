@@ -10,9 +10,23 @@ export const config = {
 };
 
 let _globalGeminiKey = '';
+let _adminUserId = '';
 
 export function getGeminiApiKey() {
-  return _globalGeminiKey || localStorage.getItem('mc_gemini_api_key') || config.geminiApiKey || '';
+  return _globalGeminiKey || config.geminiApiKey || localStorage.getItem('mc_gemini_api_key') || '';
+}
+
+// Verifica de forma estricta si el usuario es el Administrador/Dueño registrado en Supabase
+export function isUserAdmin(user) {
+  if (!user || !user.id) return false;
+
+  // 1. Si coincide con el ID de admin registrado en Supabase app_settings
+  if (_adminUserId && user.id === _adminUserId) return true;
+
+  // 2. Si tiene rol admin en metadata de Supabase
+  if (user.user_metadata?.is_admin === true || user.app_metadata?.is_admin === true) return true;
+
+  return false;
 }
 
 // Carga las configuraciones compartidas desde la tabla segura app_settings de Supabase
@@ -26,7 +40,9 @@ export async function loadGlobalSettings() {
       data.forEach(item => {
         if (item.key === 'gemini_api_key' && item.value) {
           _globalGeminiKey = item.value;
-          localStorage.setItem('mc_gemini_api_key', item.value);
+        }
+        if (item.key === 'admin_user_id' && item.value) {
+          _adminUserId = item.value;
         }
       });
     }
@@ -35,25 +51,32 @@ export async function loadGlobalSettings() {
   }
 }
 
-// Guarda la clave en Supabase para que todas las cuentas y dispositivos la tengan
+// Guarda la clave en Supabase vinculando al Admin
 export async function setGeminiApiKey(key) {
   const cleanKey = key ? key.trim() : '';
   _globalGeminiKey = cleanKey;
 
-  if (cleanKey) {
-    localStorage.setItem('mc_gemini_api_key', cleanKey);
-  } else {
-    localStorage.removeItem('mc_gemini_api_key');
-  }
-
   const sb = getSupabase();
   if (sb) {
     try {
-      await sb.from('app_settings').upsert({
-        key: 'gemini_api_key',
-        value: cleanKey,
-        updated_at: new Date().toISOString()
-      });
+      const { data: { user } } = await sb.auth.getUser();
+
+      await sb.from('app_settings').upsert([
+        {
+          key: 'gemini_api_key',
+          value: cleanKey,
+          updated_at: new Date().toISOString()
+        },
+        ...(user ? [{
+          key: 'admin_user_id',
+          value: user.id,
+          updated_at: new Date().toISOString()
+        }] : [])
+      ]);
+
+      if (user) {
+        _adminUserId = user.id;
+      }
     } catch (e) {
       console.warn('Error guardando clave en app_settings:', e);
     }
