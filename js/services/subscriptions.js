@@ -6,14 +6,32 @@ import { isUserAdmin } from '../config.js';
 export const PLAN_LIMITS = {
   trial: Infinity,   // Facturas ilimitadas durante los 3 días de prueba
   free: 1,           // 1 factura semanal
-  premium: 10,       // 10 facturas semanales
-  pro: Infinity      // Facturas ilimitadas
+  premium: 5,        // 5 facturas semanales (~20 al mes)
+  pro: Infinity      // Facturas ilimitadas + Multiusuario Familiar
 };
 
 export const PLAN_PRICES = {
-  free: { name: 'Plan Gratuito', price: '$0', period: 'Siempre gratis', limitText: '1 factura semanal' },
-  premium: { name: 'Plan Premium', price: '$9.900 COP', period: '/ mes', limitText: '10 facturas semanales (~40 al mes)' },
-  pro: { name: 'Plan Pro', price: '$19.900 COP', period: '/ mes', limitText: 'Facturas ilimitadas + Todo incluido' }
+  free: {
+    name: 'Plan Gratuito',
+    price: '$0',
+    period: 'Siempre gratis',
+    limitText: '1 factura semanal',
+    hasFamily: false
+  },
+  premium: {
+    name: 'Plan Premium',
+    price: '$9.900 COP',
+    period: '/ mes',
+    limitText: '5 facturas semanales (~20 al mes)',
+    hasFamily: false
+  },
+  pro: {
+    name: 'Plan Pro',
+    price: '$19.900 COP',
+    period: '/ mes',
+    limitText: 'Facturas ilimitadas + Perfiles Familiares (Netflix)',
+    hasFamily: true
+  }
 };
 
 export async function getUserSubscriptionInfo() {
@@ -23,14 +41,15 @@ export async function getUserSubscriptionInfo() {
   // 1. Si es el Administrador oficial registrado en Supabase
   if (isUserAdmin(user)) {
     return {
-      plan: 'admin',
-      planName: '👑 Administrador',
+      plan: 'pro',
+      planName: '👑 Administrador / Pro',
       isTrial: false,
       trialDaysLeft: 0,
       scansUsed: 0,
       scansLimit: Infinity,
       scansRemaining: Infinity,
       canScan: true,
+      canManageFamily: true,
       isAdmin: true
     };
   }
@@ -50,17 +69,25 @@ export async function getUserSubscriptionInfo() {
   const now = new Date();
   const createdAt = user.created_at ? new Date(user.created_at) : now;
   
-  // 3 Días de Prueba inicial calculados desde la creación de la cuenta
+  // 3 Días de Prueba inicial
   const trialEndsAt = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : new Date(createdAt.getTime() + (3 * 24 * 60 * 60 * 1000));
   const isTrialActive = now < trialEndsAt;
   const trialDaysLeft = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
-  let plan = profile?.plan || 'free';
-  if (isTrialActive && (!profile?.plan || profile.plan === 'free' || profile.plan === 'trial')) {
-    plan = 'trial';
+  let rawPlan = (profile?.plan || '').toLowerCase().trim();
+  let plan = 'free';
+
+  if (rawPlan === 'free' || rawPlan === 'premium' || rawPlan === 'pro') {
+    // Respeta el plan asignado en base de datos explícitamente
+    plan = rawPlan;
+  } else if (rawPlan === 'trial') {
+    plan = isTrialActive ? 'trial' : 'free';
+  } else if (!rawPlan) {
+    // Usuario nuevo sin plan asignado
+    plan = isTrialActive ? 'trial' : 'free';
   }
 
-  // Verificar reinicio semanal (lunes)
+  // Reinicio semanal (lunes)
   let scansThisWeek = Number(profile?.scans_this_week) || 0;
   const lastWeekDate = profile?.week_start_date ? new Date(profile.week_start_date) : null;
 
@@ -78,10 +105,11 @@ export async function getUserSubscriptionInfo() {
   const scansLimit = PLAN_LIMITS[plan] !== undefined ? PLAN_LIMITS[plan] : 1;
   const scansRemaining = scansLimit === Infinity ? Infinity : Math.max(0, scansLimit - scansThisWeek);
   const canScan = scansLimit === Infinity || scansRemaining > 0;
+  const canManageFamily = plan === 'pro' || plan === 'trial' || isUserAdmin(user);
 
   let planDisplayName = 'Plan Gratuito (1 factura/sem)';
-  if (plan === 'trial') planDisplayName = `✨ Prueba Gratis (${trialDaysLeft} ${trialDaysLeft === 1 ? 'día restante' : 'días restantes'})`;
-  if (plan === 'premium') planDisplayName = '⭐️ Plan Premium (10 facturas/sem)';
+  if (plan === 'trial') planDisplayName = `✨ Prueba Gratis (${trialDaysLeft} ${trialDaysLeft === 1 ? 'día' : 'días'})`;
+  if (plan === 'premium') planDisplayName = '⭐️ Plan Premium (5 facturas/sem)';
   if (plan === 'pro') planDisplayName = '🚀 Plan Pro (Ilimitado)';
 
   return {
@@ -93,6 +121,7 @@ export async function getUserSubscriptionInfo() {
     scansLimit,
     scansRemaining,
     canScan,
+    canManageFamily,
     isAdmin: false
   };
 }

@@ -2,6 +2,8 @@
 import { state } from '../state.js';
 import { formatCurrency, formatQuantity, formatDate } from '../utils/formatters.js';
 import { calculateProductMetrics, calculateGlobalBudget } from '../utils/forecasting.js';
+import { exportPurchasesToCSV, exportInventoryToCSV } from '../utils/exporter.js';
+import { showToast } from '../utils/toast.js';
 
 export function renderStatsView(container, navigateTo) {
   const products     = state.products     || [];
@@ -179,11 +181,11 @@ export function renderStatsView(container, navigateTo) {
       <div style="background: var(--bg-main); border-radius: 12px; padding: 14px;">
         <!-- Banner de Recomendación si hay 2+ tiendas -->
         ${comp.hasComparison ? `
-          <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;">
-            <div style="font-size: 0.85rem; font-weight: 800; color: #15803d;">
+          <div style="background: rgba(16,185,129,0.12); border: 1.5px solid var(--primary); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;">
+            <div style="font-size: 0.85rem; font-weight: 800; color: var(--text-main);">
               💡 ¡Ahorras ${comp.savingsPct}% comprando en ${cheapest.storeName}!
             </div>
-            <div style="font-size: 0.78rem; color: #166534; margin-top: 2px;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
               Diferencia de <strong>${formatCurrency(comp.savings)}</strong> por ${p.base_unit} respecto al más costoso (${comp.expensiveStore.storeName}).
             </div>
           </div>
@@ -226,8 +228,47 @@ export function renderStatsView(container, navigateTo) {
           }).join('')}
         </div>
       </div>
+
+      <!-- ── EXPORTACIÓN DE REPORTES A EXCEL ── -->
+      <div class="mc-card" style="margin-top: 18px; border: 1.5px solid var(--border);">
+        <h2 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;">📊 Exportar Reportes a Excel</h2>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+          Descarga tus datos consolidados en formato CSV compatible con Microsoft Excel y Google Sheets.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <button class="btn btn-secondary btn-sm" id="btn-stats-export-purchases" style="font-size: 0.8rem; font-weight: 700; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+            <span style="font-size: 1.2rem;">🛒</span>
+            <span>Historial Compras</span>
+          </button>
+
+          <button class="btn btn-secondary btn-sm" id="btn-stats-export-inventory" style="font-size: 0.8rem; font-weight: 700; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+            <span style="font-size: 1.2rem;">📦</span>
+            <span>Stock Inventario</span>
+          </button>
+        </div>
+      </div>
     `;
+
+    document.getElementById('btn-stats-export-purchases')?.addEventListener('click', () => {
+      try {
+        exportPurchasesToCSV(state.purchases, state.products, state.stores, state.categories);
+        showToast('¡Compras exportadas a Excel (CSV) exitosamente! 📊', 'success');
+      } catch (err) {
+        showToast(err.message || 'Error al exportar compras', 'error');
+      }
+    });
+
+    document.getElementById('btn-stats-export-inventory')?.addEventListener('click', () => {
+      try {
+        exportInventoryToCSV(state.inventory, state.products, state.categories, metricsList);
+        showToast('¡Inventario exportado a Excel (CSV) exitosamente! 📊', 'success');
+      } catch (err) {
+        showToast(err.message || 'Error al exportar inventario', 'error');
+      }
+    });
   }
 
   render();
 }
+

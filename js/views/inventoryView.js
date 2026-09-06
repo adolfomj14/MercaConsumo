@@ -503,7 +503,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
                 <span>¿A cuántas unidades equivale este stock?</span>
               </label>
               <input type="number" step="any" min="0.1" class="form-input" id="adj-units-count" value="${initialUnits}" placeholder="Ej: 3 (plátanos, manzanas...)">
-              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 8px 10px; border-radius: 8px; margin-top: 6px; font-size: 0.8rem; font-weight: 600;" id="adj-unit-calc">
+              <div style="background: rgba(16,185,129,0.12); border: 1px solid var(--primary); color: var(--text-main); padding: 8px 10px; border-radius: 8px; margin-top: 6px; font-size: 0.8rem; font-weight: 600;" id="adj-unit-calc">
                 Calculando equivalencia...
               </div>
             </div>
@@ -642,7 +642,7 @@ export function renderInventoryView(container, navigateTo, params = {}) {
               </div>
             </div>
 
-            <div id="consume-live-calc" style="display: none; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; margin-bottom: 10px;">
+            <div id="consume-live-calc" style="display: none; background: rgba(16,185,129,0.12); border: 1px solid var(--primary); color: var(--text-main); padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; margin-bottom: 10px;">
             </div>
 
             <div class="form-group">

@@ -1,4 +1,4 @@
-// Orquestador principal de MercaConsumo con Gestión de Sesiones y Recuperación
+// Orquestador principal de MercaConsumo con Perfiles Familiares y Planes
 import { state }          from './state.js';
 import { getSupabase }    from './services/supabase.js';
 import { getCurrentUser } from './services/auth.js';
@@ -7,6 +7,7 @@ import { fetchCategories, fetchProducts } from './services/products.js';
 import { fetchStores }    from './services/stores.js';
 import { fetchPurchases } from './services/purchases.js';
 import { fetchInventory, fetchConsumptions, fetchCycles } from './services/inventory.js';
+import { updateHeaderProfileButton } from './services/family.js';
 
 import { renderAuthView }         from './views/authView.js';
 import { renderDashboardView }    from './views/dashboardView.js';
@@ -14,12 +15,29 @@ import { renderInventoryView }    from './views/inventoryView.js';
 import { renderPurchasesView }    from './views/purchasesView.js';
 import { renderStatsView }        from './views/statsView.js';
 import { renderScanView }         from './views/scanView.js';
-import { renderSettingsView }     from './views/settingsView.js';
+import { renderSettingsView, openProfileSelectorModal } from './views/settingsView.js';
 import { renderShoppingListView } from './views/shoppingListView.js';
 
 const root      = () => document.getElementById('app-root');
 const bottomNav = () => document.getElementById('app-bottom-nav');
 const fab       = () => document.getElementById('app-fab');
+
+// Registro de Service Worker para soporte PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.warn('[PWA] Error registrando service worker:', err);
+    });
+  });
+}
+
+// Captura del evento de instalación PWA
+window.deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.deferredInstallPrompt = e;
+  window.dispatchEvent(new Event('pwa-can-install'));
+});
 
 function showApp(show) {
   if (bottomNav()) bottomNav().style.display = show ? 'flex' : 'none';
@@ -66,6 +84,7 @@ export function navigate(viewName, params = {}) {
     default:               renderDashboardView(root(), navigate);
   }
 
+  updateHeaderProfileButton();
   if (window.lucide) window.lucide.createIcons();
 }
 
@@ -83,8 +102,13 @@ async function loadData() {
 }
 
 async function afterLogin() {
+  sessionStorage.removeItem('mc_session_profile_picked');
   await loadData();
   navigate('dashboard');
+  openProfileSelectorModal(() => {
+    sessionStorage.setItem('mc_session_profile_picked', '1');
+    navigate('dashboard');
+  });
 }
 
 async function boot() {
@@ -99,7 +123,6 @@ async function boot() {
     </div>`;
   showApp(false);
 
-  // Verificar si la URL viene de un enlace de recuperación de contraseña
   const hash = window.location.hash || '';
   const isRecovery = hash.includes('type=recovery') || hash.includes('access_token');
 
@@ -112,7 +135,16 @@ async function boot() {
 
   if (user) {
     await loadData();
+    updateHeaderProfileButton();
     navigate('dashboard');
+    
+    // Si inicia una nueva sesión de navegador, pregunta con cuál perfil entrar (estilo Netflix)
+    if (!sessionStorage.getItem('mc_session_profile_picked')) {
+      openProfileSelectorModal(() => {
+        sessionStorage.setItem('mc_session_profile_picked', '1');
+        navigate('dashboard');
+      });
+    }
   } else {
     navigate('auth');
   }
@@ -126,7 +158,9 @@ function setup() {
   fab()?.addEventListener('click', () => navigate('purchases', { openModal: true }));
 
   document.getElementById('btn-header-home')?.addEventListener('click', () => navigate('dashboard'));
-  document.getElementById('btn-header-profile')?.addEventListener('click', () => navigate('settings'));
+  document.getElementById('btn-header-profile')?.addEventListener('click', () => {
+    openProfileSelectorModal(() => navigate('dashboard'));
+  });
   document.getElementById('btn-header-theme')?.addEventListener('click', toggleTheme);
 
   const sb = getSupabase();

@@ -12,6 +12,7 @@ export async function getCurrentUser() {
     if (error) throw error;
     if (session?.user) {
       state.setUser(session.user);
+      await fetchUserProfile(session.user.id);
       return session.user;
     }
   } catch (err) {
@@ -19,6 +20,24 @@ export async function getCurrentUser() {
   }
 
   state.setUser(null);
+  state.setProfile(null);
+  return null;
+}
+
+// Carga el registro de public.profiles
+export async function fetchUserProfile(userId) {
+  const sb = getSupabase();
+  if (!sb || !userId) return null;
+
+  try {
+    const { data, error } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+    if (!error && data) {
+      state.setProfile(data);
+      return data;
+    }
+  } catch (e) {
+    console.warn('[Auth] Error al consultar perfil:', e);
+  }
   return null;
 }
 
@@ -47,6 +66,7 @@ export async function signIn(email, password) {
   }
 
   state.setUser(data.user);
+  await fetchUserProfile(data.user.id);
   console.log('[Auth] Sesión iniciada →', data.user.email);
   return data.user;
 }
@@ -133,4 +153,22 @@ export async function signOut() {
   if (sb) await sb.auth.signOut();
   state.setUser(null);
   console.log('[Auth] Sesión cerrada.');
+}
+
+// Elimina la cuenta del usuario actual (llama a RPC con SECURITY DEFINER).
+// Requiere que exista la función public.delete_own_account() en Supabase.
+export async function deleteOwnAccount() {
+  const sb = getSupabase();
+  if (!sb) throw new Error('Sin conexión con Supabase.');
+
+  const { error } = await sb.rpc('delete_own_account');
+  if (error) throw new Error(error.message || 'Error al eliminar la cuenta.');
+
+  // Limpiar estado y sesión local
+  state.setUser(null);
+  state.setProfile(null);
+  sessionStorage.removeItem('mc_session_profile_picked');
+  localStorage.removeItem('mc_active_member');
+  if (sb) await sb.auth.signOut().catch(() => {});
+  console.log('[Auth] Cuenta eliminada y sesión cerrada.');
 }

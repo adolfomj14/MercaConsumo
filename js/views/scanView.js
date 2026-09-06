@@ -33,28 +33,28 @@ export function renderScanView(container, navigateTo) {
       </div>
 
       <!-- Tarjeta de Estado del Plan y Escaneos Disponibles -->
-      <div class="mc-card" style="background: ${sub.canScan ? '#f0fdf4' : '#fef2f2'}; border: 1.5px solid ${sub.canScan ? '#bbf7d0' : '#fecaca'}; padding: 12px 14px; margin-bottom: 16px;">
+      <div class="mc-card" style="background: var(--bg-card); border: 1.5px solid var(--border); border-left: 4.5px solid ${sub.canScan ? 'var(--primary)' : 'var(--danger)'}; padding: 12px 14px; margin-bottom: 16px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span style="font-size:0.75rem; font-weight:700; color:${sub.canScan ? '#166534' : '#991b1b'};">TU PLAN ACTUAL</span>
-            <div style="font-size:0.95rem; font-weight:800; color:var(--text-main);">
+            <span style="font-size:0.72rem; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; color:${sub.canScan ? 'var(--primary)' : 'var(--danger)'};">TU PLAN ACTUAL</span>
+            <div style="font-size:0.95rem; font-weight:800; color:var(--text-main); margin-top:2px;">
               ${sub.planName}
             </div>
           </div>
 
           <div style="text-align:right;">
             <span style="font-size:0.72rem; color:var(--text-muted);">Escaneos esta semana:</span>
-            <div style="font-size:0.95rem; font-weight:800; color:${sub.canScan ? '#166534' : '#dc2626'};">
-              ${sub.scansLimit === Infinity ? 'Ilimitados ⚡' : `${sub.scansUsed} de ${sub.scansLimit} usados`}
+            <div style="font-size:0.95rem; font-weight:800; color:${sub.canScan ? 'var(--primary)' : 'var(--danger)'}; margin-top:2px;">
+              ${sub.scansLimit === Infinity ? 'Ilimitados ⚡' : `${sub.scansRemaining} de ${sub.scansLimit} disponibles`}
             </div>
           </div>
         </div>
 
         ${!sub.canScan ? `
-          <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #fca5a5; display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:0.78rem; color:#b91c1c; font-weight:600;">⚠️ Agotaste tu escaneo semanal</span>
-            <button class="btn btn-primary btn-sm" id="btn-upgrade-scan-card" style="font-size:0.75rem; padding:3px 8px;">
-              ⭐ Mejorar a Premium
+          <div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.78rem; color:var(--danger); font-weight:600;">⚠️ Agotaste tus facturas de esta semana</span>
+            <button class="btn btn-primary btn-sm" id="btn-upgrade-scan-card" style="font-size:0.75rem; padding:4px 10px; font-weight:700;">
+              ⭐ Ver Planes
             </button>
           </div>
         ` : ''}

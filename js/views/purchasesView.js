@@ -5,6 +5,7 @@ import { registerPurchase, updatePurchase, deletePurchase } from '../services/pu
 import { createProduct, fetchProducts } from '../services/products.js';
 import { createStore, fetchStores } from '../services/stores.js';
 import { showToast, showConfirmDialog } from '../utils/toast.js';
+import { exportPurchasesToCSV } from '../utils/exporter.js';
 
 export function renderPurchasesView(container, navigateTo, params = {}) {
   const purchases = state.purchases || [];
@@ -16,7 +17,14 @@ export function renderPurchasesView(container, navigateTo, params = {}) {
           <h1 style="font-size:1.35rem; font-weight:800;">Compras</h1>
           <p style="color:var(--text-muted); font-size:0.85rem;">Historial y registro de facturas</p>
         </div>
-        <button class="btn btn-primary btn-sm" id="btn-open-purchase-modal">+ Nueva Compra</button>
+        <div style="display:flex; gap:8px;">
+          ${purchases.length > 0 ? `
+            <button class="btn btn-secondary btn-sm" id="btn-export-purchases-csv" style="font-size:0.75rem; font-weight:700; padding:6px 10px;" title="Exportar a Excel">
+              📊 Excel
+            </button>
+          ` : ''}
+          <button class="btn btn-primary btn-sm" id="btn-open-purchase-modal">+ Nueva Compra</button>
+        </div>
       </div>
 
       ${purchases.length === 0 ? `
@@ -75,6 +83,15 @@ export function renderPurchasesView(container, navigateTo, params = {}) {
 
   function attachEvents() {
     document.getElementById('btn-open-purchase-modal')?.addEventListener('click', () => openPurchaseModal());
+
+    document.getElementById('btn-export-purchases-csv')?.addEventListener('click', () => {
+      try {
+        exportPurchasesToCSV(state.purchases, state.products, state.stores, state.categories);
+        showToast('¡Compras exportadas a Excel (CSV) exitosamente! 📊', 'success');
+      } catch (err) {
+        showToast(err.message || 'Error al exportar compras', 'error');
+      }
+    });
 
     document.querySelectorAll('.btn-edit-purchase').forEach(btn => {
       btn.addEventListener('click', () => {
